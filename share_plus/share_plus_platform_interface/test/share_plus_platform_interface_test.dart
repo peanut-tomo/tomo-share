@@ -67,10 +67,12 @@ void main() {
         uri: Uri.parse('https://pub.dev/packages/share_plus'),
         sharePositionOrigin: const Rect.fromLTWH(1.0, 2.0, 3.0, 4.0),
         excludedCupertinoActivities: [CupertinoActivityType.airDrop],
+        targetPackage: AndroidSharePackage.telegram,
       ),
     );
     verify(mockChannel.invokeMethod<String>('share', <String, dynamic>{
       'uri': 'https://pub.dev/packages/share_plus',
+      'targetPackage': 'org.telegram.messenger',
       'originX': 1.0,
       'originY': 2.0,
       'originWidth': 3.0,
@@ -84,11 +86,16 @@ void main() {
         subject: 'some subject to share',
         sharePositionOrigin: const Rect.fromLTWH(1.0, 2.0, 3.0, 4.0),
         excludedCupertinoActivities: [],
+        allowedPackages: [
+          AndroidSharePackage.telegram,
+          AndroidSharePackage.x,
+        ],
       ),
     );
     verify(mockChannel.invokeMethod<String>('share', <String, dynamic>{
       'text': 'some text to share',
       'subject': 'some subject to share',
+      'allowedPackages': ['org.telegram.messenger', 'com.twitter.android'],
       'originX': 1.0,
       'originY': 2.0,
       'originWidth': 3.0,

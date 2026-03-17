@@ -2,9 +2,11 @@ package dev.fluttercommunity.plus.share
 
 import android.app.Activity
 import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
 import android.net.Uri
 import android.os.Build
 import androidx.core.content.FileProvider
@@ -65,6 +67,9 @@ internal class Share(
         val title = arguments["title"] as String?
         val paths = (arguments["paths"] as List<*>?)?.filterIsInstance<String>()
         val mimeTypes = (arguments["mimeTypes"] as List<*>?)?.filterIsInstance<String>()
+        val targetPackage = arguments["targetPackage"] as String?
+        val allowedPackages =
+            (arguments["allowedPackages"] as List<*>?)?.filterIsInstance<String>()
         val fileUris = paths?.let { getUrisForPaths(paths) }
 
         // Create Share Intent
@@ -113,31 +118,24 @@ internal class Share(
             }
         }
 
-        // Create the chooser intent
-        val chooserIntent =
-            if (withResult && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-                // Build chooserIntent with broadcast to ShareSuccessManager on success
-                Intent.createChooser(
-                    shareIntent,
-                    title,
-                    PendingIntent.getBroadcast(
-                        context,
-                        0,
-                        Intent(context, SharePlusPendingIntent::class.java),
-                        PendingIntent.FLAG_UPDATE_CURRENT or immutabilityIntentFlags
-                    ).intentSender
-                )
-            } else {
-                Intent.createChooser(shareIntent, title)
-            }
+        val shareTargets = createShareTargets(shareIntent, targetPackage, allowedPackages)
+        val launchIntent = createLaunchIntent(
+            shareIntent = shareIntent,
+            title = title,
+            shareTargets = shareTargets,
+            withResult = withResult,
+        )
 
-        // Grant permissions to all apps that can handle the files shared
+        // Grant permissions to all apps that can handle the files shared.
         if (fileUris != null) {
-            val resInfoList = getContext().packageManager.queryIntentActivities(
-                chooserIntent, PackageManager.MATCH_DEFAULT_ONLY
-            )
-            resInfoList.forEach { resolveInfo ->
-                val packageName = resolveInfo.activityInfo.packageName
+            val targetPackages = if (shareTargets.isNotEmpty()) {
+                shareTargets.map { it.packageName }
+            } else {
+                getContext().packageManager.queryIntentActivities(
+                    shareIntent, PackageManager.MATCH_DEFAULT_ONLY
+                ).map { it.activityInfo.packageName }
+            }
+            targetPackages.distinct().forEach { packageName ->
                 fileUris.forEach { fileUri ->
                     getContext().grantUriPermission(
                         packageName,
@@ -148,8 +146,12 @@ internal class Share(
             }
         }
 
+        if (withResult && shareTargets.size == 1) {
+            SharePlusPendingIntent.result = shareTargets.first().componentName.flattenToString()
+        }
+
         // Launch share intent
-        startActivity(chooserIntent, withResult)
+        startActivity(launchIntent, withResult)
     }
 
     private fun startActivity(intent: Intent, withResult: Boolean) {
@@ -166,6 +168,114 @@ internal class Share(
                 manager.unavailable()
             }
             context.startActivity(intent)
+        }
+    }
+
+    @Throws(IOException::class)
+    private fun createShareTargets(
+        shareIntent: Intent,
+        targetPackage: String?,
+        allowedPackages: List<String>?,
+    ): List<ShareTarget> {
+        if (targetPackage != null && !allowedPackages.isNullOrEmpty()) {
+            throw IOException("targetPackage and allowedPackages cannot be used together")
+        }
+
+        return when {
+            !targetPackage.isNullOrBlank() -> {
+                val resolveInfos = getContext().packageManager.queryIntentActivities(
+                    Intent(shareIntent).setPackage(targetPackage),
+                    PackageManager.MATCH_DEFAULT_ONLY,
+                )
+                val resolveInfo = resolveInfos.firstOrNull()
+                    ?: throw IOException("No share target found for package '$targetPackage'")
+                listOf(createShareTarget(shareIntent, resolveInfo))
+            }
+            !allowedPackages.isNullOrEmpty() -> {
+                val order = allowedPackages.withIndex().associate { it.value to it.index }
+                val resolveInfos = getContext().packageManager.queryIntentActivities(
+                    shareIntent,
+                    PackageManager.MATCH_DEFAULT_ONLY,
+                )
+                val filteredResolveInfos = resolveInfos
+                    .filter { resolveInfo ->
+                        order.containsKey(resolveInfo.activityInfo.packageName)
+                    }
+                    .sortedBy { resolveInfo ->
+                        order.getValue(resolveInfo.activityInfo.packageName)
+                    }
+                    .distinctBy { resolveInfo ->
+                        resolveInfo.activityInfo.packageName
+                    }
+                if (filteredResolveInfos.isEmpty()) {
+                    throw IOException("No share targets found for allowedPackages")
+                }
+                filteredResolveInfos.map { resolveInfo ->
+                    createShareTarget(shareIntent, resolveInfo)
+                }
+            }
+            else -> emptyList()
+        }
+    }
+
+    private fun createShareTarget(
+        shareIntent: Intent,
+        resolveInfo: ResolveInfo,
+    ): ShareTarget {
+        val componentName = ComponentName(
+            resolveInfo.activityInfo.packageName,
+            resolveInfo.activityInfo.name,
+        )
+        val intent = Intent(shareIntent).apply {
+            component = componentName
+            `package` = resolveInfo.activityInfo.packageName
+        }
+        return ShareTarget(intent, componentName)
+    }
+
+    private fun createLaunchIntent(
+        shareIntent: Intent,
+        title: String?,
+        shareTargets: List<ShareTarget>,
+        withResult: Boolean,
+    ): Intent {
+        if (shareTargets.isEmpty()) {
+            return createChooserIntent(shareIntent, title, withResult)
+        }
+
+        if (shareTargets.size == 1) {
+            return shareTargets.first().intent
+        }
+
+        val primaryIntent = shareTargets.first().intent
+        val additionalIntents = shareTargets
+            .drop(1)
+            .map { it.intent }
+            .toTypedArray()
+
+        return createChooserIntent(primaryIntent, title, withResult).apply {
+            putExtra(Intent.EXTRA_INITIAL_INTENTS, additionalIntents)
+        }
+    }
+
+    private fun createChooserIntent(
+        shareIntent: Intent,
+        title: String?,
+        withResult: Boolean,
+    ): Intent {
+        return if (withResult && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            Intent.createChooser(
+                shareIntent,
+                title,
+                PendingIntent.getBroadcast(
+                    context,
+                    0,
+                    Intent(context, SharePlusPendingIntent::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or immutabilityIntentFlags
+                ).intentSender
+            )
+        } else {
+            Intent.createChooser(shareIntent, title)
         }
     }
 
@@ -244,5 +354,13 @@ internal class Share(
         val newFile = File(folder, file.name)
         file.copyTo(newFile, true)
         return newFile
+    }
+
+    private data class ShareTarget(
+        val intent: Intent,
+        val componentName: ComponentName,
+    ) {
+        val packageName: String
+            get() = componentName.packageName
     }
 }

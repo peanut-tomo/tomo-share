@@ -56,11 +56,37 @@ void main() {
       );
     });
 
+    test('share throws ArgumentError if allowedPackages is empty', () async {
+      expect(
+        () => sharePlus.share(ShareParams(text: 'text', allowedPackages: [])),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test(
+        'share throws ArgumentError if targetPackage and allowedPackages are both provided',
+        () async {
+      expect(
+        () => sharePlus.share(
+          ShareParams(
+            text: 'text',
+            targetPackage: AndroidSharePackage.telegram,
+            allowedPackages: [AndroidSharePackage.telegram],
+          ),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
     test('share calls platform share method with correct params', () async {
-      final params = ShareParams(text: 'text');
+      final params = ShareParams(
+        text: 'text',
+        targetPackage: AndroidSharePackage.telegram,
+      );
       final result = await sharePlus.share(params);
       expect(result, ShareResult.unavailable);
       expect(fakePlatform.lastParams?.text, params.text);
+      expect(fakePlatform.lastParams?.targetPackage, params.targetPackage);
     });
   });
 }

@@ -9,6 +9,7 @@ import 'package:share_plus_platform_interface/share_plus_platform_interface.dart
 
 export 'package:share_plus_platform_interface/share_plus_platform_interface.dart'
     show
+        AndroidSharePackage,
         ShareResult,
         ShareResultStatus,
         XFile,
@@ -85,6 +86,16 @@ class SharePlus {
 
     if (params.text != null && params.text!.isEmpty) {
       throw ArgumentError('text provided, but cannot be empty');
+    }
+
+    if (params.allowedPackages != null && params.allowedPackages!.isEmpty) {
+      throw ArgumentError('allowedPackages provided, but cannot be empty');
+    }
+
+    if (params.targetPackage != null && params.allowedPackages != null) {
+      throw ArgumentError(
+        'targetPackage and allowedPackages cannot be provided at the same time',
+      );
     }
 
     if (params.files != null && params.files!.isEmpty) {

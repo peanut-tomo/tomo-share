@@ -142,6 +142,28 @@ class ShareParams {
   ///   Parameter ignored on other platforms.
   final List<CupertinoActivityType>? excludedCupertinoActivities;
 
+  /// Restricts the share target to a single Android package.
+  ///
+  /// This is useful when you want to share directly to a known app, such as
+  /// Telegram or X, without showing the full Android share sheet.
+  ///
+  /// Cannot be used together with [allowedPackages].
+  ///
+  /// * Supported platforms: Android
+  ///   Parameter ignored on other platforms.
+  final AndroidSharePackage? targetPackage;
+
+  /// Restricts the Android share sheet to the provided package names.
+  ///
+  /// This is useful when you want to offer a curated subset of apps in the
+  /// chooser. The receiving app must still support the shared content type.
+  ///
+  /// Cannot be used together with [targetPackage].
+  ///
+  /// * Supported platforms: Android
+  ///   Parameter ignored on other platforms.
+  final List<AndroidSharePackage>? allowedPackages;
+
   ShareParams({
     this.text,
     this.subject,
@@ -154,7 +176,38 @@ class ShareParams {
     this.downloadFallbackEnabled = true,
     this.mailToFallbackEnabled = true,
     this.excludedCupertinoActivities,
+    this.targetPackage,
+    this.allowedPackages,
   });
+}
+
+/// Known Android share targets supported by [ShareParams.targetPackage] and
+/// [ShareParams.allowedPackages].
+enum AndroidSharePackage {
+  x('com.twitter.android'),
+  telegram('org.telegram.messenger'),
+  telegramX('org.thunderdog.challegram'),
+  whatsApp('com.whatsapp'),
+  whatsAppBusiness('com.whatsapp.w4b'),
+  facebook('com.facebook.katana'),
+  facebookMessenger('com.facebook.orca'),
+  instagram('com.instagram.android'),
+  threads('com.instagram.barcelona'),
+  line('jp.naver.line.android'),
+  signal('org.thoughtcrime.securesms'),
+  discord('com.discord'),
+  slack('com.Slack'),
+  gmail('com.google.android.gm'),
+  googleMessages('com.google.android.apps.messaging'),
+  samsungMessages('com.samsung.android.messaging'),
+  weChat('com.tencent.mm'),
+  qq('com.tencent.mobileqq'),
+  weibo('com.sina.weibo');
+
+  const AndroidSharePackage(this.packageName);
+
+  /// The Android package name used by the target app.
+  final String packageName;
 }
 
 /// The result of a share to determine what action the
