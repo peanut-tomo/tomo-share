@@ -1,0 +1,19 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  package="com.tomo.share.tomo_share">
+  <queries>
+    <package android:name="org.telegram.messenger" />
+    <package android:name="org.thunderdog.challegram" />
+  </queries>
+
+  <application>
+    <provider
+      android:name="androidx.core.content.FileProvider"
+      android:authorities="${applicationId}.tomo_share.fileprovider"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/tomo_share_file_paths" />
+    </provider>
+  </application>
+</manifest>
